@@ -1,0 +1,140 @@
+---
+title: "Machine Learning Project"
+author: "Federico Di Martino"
+date: "21 December 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project Description
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Synopsis
+
+A random forest model was constructed, cross-validated and applied to a test set. Cross-validation revealed the expected out of sample error to be 0.35%. The 20 test cases were predicted 100% correctly.
+
+## Initial Setup
+```{r, message= FALSE}
+
+## Load necessary packages
+library(ggplot2)
+library(caret)
+library(dplyr)
+library(randomForest)
+
+## Set seed to ensure reproducibility
+set.seed(23)
+
+## Read in the data
+
+testing.data <- read.csv("pml-testing.csv")
+training.data <- read.csv("pml-training.csv")
+
+
+```
+
+## Pre-processing the data
+
+First of all variables which are prima facie not useful in predicting exercise quality were removed. These are the the first seven variables:
+
+1.  obs: unique sequential number of each instance of exercise
+2.  user_name: name of exercizer
+3.  raw_timestamp_part_1: first section of timestamp of when observation was collected
+4.  raw_timestamp_part_2: second section of timestamp of when observation was collected
+5.  cvtd_timestamp: timestamp values converted to mm/dd/yyyy hh:mm format
+6.  new_window: row represention of if a new time window for sliding window feature extraction
+7.  num_window: numeric identifier of feature extraction window
+
+By definition 1 has no predictive power. 2 doesn't generalise to a larger population. 3,4,5 are times and it is assumed that what constitutes exercise quality remains fixed in time. 6,7 don't neatly correspond to actual physical data.
+
+```{r}
+
+## Remove first 7 variables
+training.data.processing.1 <- training.data[-(1:7)]
+
+
+```
+
+
+The presence of NA values in the data is problematic for model building so any variable column containing one was purged.
+
+```{r}
+
+## Count number of NA in each column
+number.na <- colSums(sapply(training.data.processing.1, is.na))
+## Select columns with 0 NA
+training.data.processing.2 <- training.data.processing.1[,number.na == 0] 
+
+```
+
+To avoid an unstable fit in our model, zero and near-zero variance predictors were identified and removed from the training data.
+
+```{r}
+## Determine which variables have near zero variance 
+nearzerovariance <- nearZeroVar(training.data.processing.2, saveMetrics = TRUE)
+## Remove variables with near zero variance
+training.data.processed <- training.data.processing.2[,nearzerovariance$nzv==FALSE]
+
+```
+
+From 160 initial variables, the above pre-processing led to 53 being selected.
+
+## Machine Learning
+
+Part of the training data was split off for cross-validation.
+
+```{r}
+
+inTrain <- createDataPartition(training.data.processed$classe,p = 3/4 , list = FALSE)
+training.data.final <- training.data.processed[inTrain,]
+validation.data <- training.data.processed[-inTrain,]
+
+
+```
+
+Since speed is not of major importance to the project, the model built will be of the random forests type.
+
+```{r, cache= TRUE}
+## Build the model
+rf.model <- randomForest(classe ~ . , data = training.data.final)
+
+```
+
+Cross-validation of the holdout type was performed to calculate an out of sample error for the model.
+
+```{r}
+
+rf.prediction.val <- predict(rf.model , validation.data)
+
+rf.confusionmatrix <- confusionMatrix(rf.prediction.val, validation.data$classe)
+rf.confusionmatrix
+
+
+
+```
+
+The model has an accuracy of 99.65% which means an expected out of sample error of 0.35%. This was determined to be satisfactory so the model was used to predict the manner in which the exercise was performed in the testing set.
+
+
+```{r}
+
+rf.prediction <- predict(rf.model, testing.data)
+rf.prediction
+
+```
+
+This prediction would turn out to be 100% correct.
+
+## Conclusion 
+The model has an accuracy of 99.65% which means an expected out of sample error of 0.35%.The 20 test cases were all predicted correctly.
+
+## Citations
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz52NfsKUSB
+
